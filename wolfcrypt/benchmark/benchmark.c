@@ -222,6 +222,10 @@
     #endif
 #endif
 
+#ifdef WOLFSSL_TI_AM64X
+    #include <wolfssl/wolfcrypt/port/ti/ti-sa2ul_port.h>
+#endif
+
 #ifdef WOLFSSL_ASYNC_CRYPT
     #include <wolfssl/wolfcrypt/async.h>
 #endif

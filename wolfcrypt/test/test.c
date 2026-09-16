@@ -491,6 +491,10 @@ static const byte const_byte_array[] = "A+Gd\0\0\0";
     #endif
 #endif
 
+#ifdef WOLFSSL_TI_AM64X
+    #include <wolfssl/wolfcrypt/port/ti/ti-sa2ul_port.h>
+#endif
+
 #ifdef _MSC_VER
     /* 4996 warning to use MS extensions e.g., strcpy_s instead of strncpy */
     #pragma warning(disable: 4996)

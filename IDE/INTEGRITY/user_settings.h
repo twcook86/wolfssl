@@ -225,6 +225,26 @@ int integrity_rand_generate_seed(unsigned char* output, unsigned int sz);
 #define NO_PWDBASED
 
 /* ------------------------------------------------- */
+/* TI SA2UL Hardware Acceleration (crypto callback) */
+/* ------------------------------------------------- */
+/* Staged port: registers a WOLF_CRYPTO_CB device for AES-CBC/ECB/GCM and
+ * SHA256/SHA512, but every handler is currently a stub that falls back
+ * to software -- the mcu_plus_sdk SA2UL driver this needs to actually
+ * touch hardware isn't in this tree yet. See
+ * wolfcrypt/src/port/ti/README_sa2ul.md and ti-sa2ul_port.c's own header
+ * comment. TRNG is NOT part of this -- that's rng_driver.c, unrelated
+ * and already working (direct register access via IODevice). */
+#define WOLFSSL_TI_AM64X
+#define HAVE_AES_ECB
+/* wc_Sha512 is shared with SHA384 (both defined above); this port's
+ * SHA512 dispatch needs to tell them apart. */
+#define WOLFSSL_SHA512_HASHTYPE
+#ifndef WOLF_CRYPTO_CB
+    #define WOLF_CRYPTO_CB
+#endif
+#define WOLF_CRYPTO_CB_FREE
+
+/* ------------------------------------------------- */
 /* Static Memory */
 /* ------------------------------------------------- */
 /* wolfcrypt_test()/benchmark_test() each allocate their own fixed pool

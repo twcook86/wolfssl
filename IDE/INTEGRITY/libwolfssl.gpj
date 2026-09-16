@@ -28,6 +28,7 @@ wolfcrypt/src/chacha.c
 wolfcrypt/src/chacha20_poly1305.c
 wolfcrypt/src/coding.c
 wolfcrypt/src/cpuid.c
+wolfcrypt/src/cryptocb.c
 wolfcrypt/src/ecc.c
 wolfcrypt/src/ecc_fp.c
 wolfcrypt/src/error.c
@@ -55,3 +56,7 @@ wolfcrypt/src/wolfmath.c
 # This Task reaches it only through the "RngDev" IODevice -- see
 # integrity_port.c and rng_iodevice.h.
 IDE/INTEGRITY/integrity_port.c
+
+# TI SA2UL hardware acceleration (WOLF_CRYPTO_CB) -- staged/stubbed, see
+# wolfcrypt/src/port/ti/README_sa2ul.md.
+wolfcrypt/src/port/ti/ti-sa2ul_port.c
