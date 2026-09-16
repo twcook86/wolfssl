@@ -1,0 +1,4 @@
+#!gbuild
+[INTEGRITY Application]
+wolfssl_test_app.gpj [Program]
+wolfssl_test.int

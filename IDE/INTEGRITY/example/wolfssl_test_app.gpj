@@ -1,0 +1,12 @@
+#!gbuild
+[Program]
+    -I../../..
+    -I..
+    -DWOLFSSL_USER_SETTINGS
+    -lsocket
+    -lposix
+wolfssl_test.c
+../../../wolfcrypt/test/test.c
+    # test.c has its own main() by default; we supply ours above instead
+    -DNO_MAIN_DRIVER
+libwolfssl.a [System Library]

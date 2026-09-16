@@ -1,0 +1,6 @@
+#!gbuild
+[Project]
+    -L${%option_value(:binDir)}
+libwolfssl.gpj [Library]
+wolfssl_test.gpj [INTEGRITY Application]
+    :sourceDir=example
