@@ -23,12 +23,14 @@
 
 #include <wolfssl/wolfcrypt/wc_port.h>
 #include <wolfcrypt/test/test.h>
+#include <wolfcrypt/benchmark/benchmark.h>
 
 #define DEBUG_ENTRY_LOOP
 
 int main(void)
 {
     int initRet;
+    int benchRet;
     wc_test_ret_t testRet;
 
 #ifdef DEBUG_ENTRY_LOOP
@@ -48,14 +50,22 @@ int main(void)
     }
 
     testRet = wolfcrypt_test(NULL);
-
-    wolfCrypt_Cleanup();
-
     if (testRet != 0) {
+        wolfCrypt_Cleanup();
         printf("wolfcrypt_test FAILED: %d\n", (int)testRet);
         return 1;
     }
-
     printf("wolfcrypt_test PASSED\n");
+
+    benchRet = benchmark_test(NULL);
+
+    wolfCrypt_Cleanup();
+
+    if (benchRet != 0) {
+        printf("benchmark_test FAILED: %d\n", benchRet);
+        return 1;
+    }
+
+    printf("benchmark_test PASSED\n");
     return 0;
 }

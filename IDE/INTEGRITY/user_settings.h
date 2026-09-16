@@ -225,6 +225,23 @@ int integrity_rand_generate_seed(unsigned char* output, unsigned int sz);
 #define NO_PWDBASED
 
 /* ------------------------------------------------- */
+/* Static Memory */
+/* ------------------------------------------------- */
+/* wolfcrypt_test()/benchmark_test() each allocate their own fixed pool
+ * (gTestMemory/gBenchMemory in test.c/benchmark.c) instead of using the
+ * heap directly when this is defined -- see WOLFSSL_STATIC_MEMORY_TEST_SZ
+ * below for the size of each. */
+#define WOLFSSL_STATIC_MEMORY
+#define WOLFSSL_STATIC_MEMORY_TEST_SZ (100 * 1024)
+
+/* ------------------------------------------------- */
+/* Benchmark */
+/* ------------------------------------------------- */
+/* Scales down benchmark_test()'s buffer sizes/iteration counts for
+ * constrained (non-desktop-class) targets. */
+#define BENCH_EMBEDDED
+
+/* ------------------------------------------------- */
 /* Debugging */
 /* ------------------------------------------------- */
 #if 0 /* Enable debug logging */
