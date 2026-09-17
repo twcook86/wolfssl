@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <INTEGRITY_intrinsics.h>
 
 #include "rng_driver.h"
 
@@ -80,6 +81,29 @@ static void sa2ul_rng_read128(uint32_t *w0, uint32_t *w1, uint32_t *w2,
     TRNG_REG32(TRNG_INTACK) = TRNG_STATUS_READY_MASK;
 }
 
+
+static volatile unsigned int gRngLock = 0u;
+
+static void rng_lock(void)
+{
+    for (;;) {
+        if (__LDXR32((unsigned int *)&gRngLock) == 0u) {
+            if (__STXR32(1u, (unsigned int *)&gRngLock) == 0) {
+                break; /* acquired */
+            }
+        }
+        /* either already held, or another core won the store race --
+         * either way, loop back to a fresh __LDXR32() and try again */
+    }
+    __DMB(); /* acquire: nothing below this line may be reordered above it */
+}
+
+static void rng_unlock(void)
+{
+    __DMB(); /* release: everything above this line must land first */
+    gRngLock = 0u;
+}
+
 int rng_driver_read(unsigned char *output, unsigned int sz)
 {
     /* TRNG provides 128 bits of entropy at a time */
@@ -89,10 +113,14 @@ int rng_driver_read(unsigned char *output, unsigned int sz)
     } fifo;
     static size_t fifo_pos = 0;
     unsigned int i;
+    int ret = 0;
+
+    rng_lock();
 
     if (gTrngBase == NULL) {
         if (rng_driver_init() != 0) {
-            return -1;
+            ret = -1;
+            goto out;
         }
     }
 
@@ -105,5 +133,7 @@ int rng_driver_read(unsigned char *output, unsigned int sz)
         fifo_pos %= 16u;
     }
 
-    return 0;
+out:
+    rng_unlock();
+    return ret;
 }
