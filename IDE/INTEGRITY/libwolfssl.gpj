@@ -6,10 +6,6 @@
     -DWOLFSSL_USER_SETTINGS
     -o libwolfssl.a
 
-# --- TLS (src/) ---
-# src/ssl_*.c, src/pk*.c, src/x509*.c, src/bio.c, src/conf.c are #included
-# into src/ssl.c/src/pk.c and must NOT be listed separately here, or the
-# build fails with duplicate symbols.
 src/internal.c
 src/keys.c
 src/ssl.c
@@ -19,13 +15,11 @@ src/wolfio.c
 src/crl.c
 src/ocsp.c
 
-# --- wolfCrypt (wolfcrypt/src/) ---
-# wolfcrypt/src/misc.c and evp.c are #included elsewhere (per AGENTS.md) --
-# do not list them here either.
 wolfcrypt/src/aes.c
 wolfcrypt/src/asn.c
 wolfcrypt/src/chacha.c
 wolfcrypt/src/chacha20_poly1305.c
+wolfcrypt/src/cmac.c
 wolfcrypt/src/coding.c
 wolfcrypt/src/cpuid.c
 wolfcrypt/src/cryptocb.c
@@ -43,20 +37,17 @@ wolfcrypt/src/sha.c
 wolfcrypt/src/sha256.c
 wolfcrypt/src/sha512.c
 wolfcrypt/src/signature.c
+wolfcrypt/src/sp_arm64.c
 wolfcrypt/src/sp_int.c
 wolfcrypt/src/wc_encrypt.c
 wolfcrypt/src/wc_port.c
 wolfcrypt/src/wolfentropy.c
 wolfcrypt/src/wolfmath.c
 
-# --- INTEGRITY port glue ---
-# rng_driver.c (the actual TRNG register access) is NOT here: it's
-# Kernel-linked, built directly into myproject_kernel.gpj instead (see
-# proj/myproject_kernel.gpj and rng_driver.c)
-# This Task reaches it only through the "RngDev" IODevice -- see
-# integrity_port.c and rng_iodevice.h.
-IDE/INTEGRITY/integrity_port.c
+wolfcrypt/src/port/arm/armv8-aes-asm_c.c
+wolfcrypt/src/port/arm/armv8-chacha-asm_c.c
+wolfcrypt/src/port/arm/armv8-sha256-asm_c.c
+wolfcrypt/src/port/arm/armv8-sha512-asm_c.c
 
-# TI SA2UL hardware acceleration (WOLF_CRYPTO_CB) -- staged/stubbed, see
-# wolfcrypt/src/port/ti/README_sa2ul.md.
+IDE/INTEGRITY/integrity_port.c
 wolfcrypt/src/port/ti/ti-sa2ul_port.c
