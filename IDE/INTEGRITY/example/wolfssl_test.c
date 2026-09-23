@@ -55,7 +55,7 @@ int main(void)
         printf("wolfcrypt_test FAILED: %d\n", (int)testRet);
         return 1;
     }
-    printf("wolfcrypt_test PASSED\n");
+    printf("wolfcrypt_test PASSED\n\n");
 
     benchRet = benchmark_test(NULL);
 
