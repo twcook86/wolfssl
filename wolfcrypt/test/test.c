@@ -491,8 +491,8 @@ static const byte const_byte_array[] = "A+Gd\0\0\0";
     #endif
 #endif
 
-#ifdef WOLFSSL_TI_AM64X
-    #include <wolfssl/wolfcrypt/port/ti/ti-sa2ul_port.h>
+#ifdef WOLFSSL_TI_AM64X_A53_INTEGRITY
+    #include <wolfssl/wolfcrypt/port/ti/ti-sa2ul_a53_integrity_port.h>
 #endif
 
 #ifdef _MSC_VER

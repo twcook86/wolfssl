@@ -25,7 +25,7 @@
 #include <wolfcrypt/test/test.h>
 #include <wolfcrypt/benchmark/benchmark.h>
 
-#define DEBUG_ENTRY_LOOP
+// #define DEBUG_ENTRY_LOOP
 
 int main(void)
 {

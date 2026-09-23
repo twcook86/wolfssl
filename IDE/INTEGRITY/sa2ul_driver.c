@@ -554,7 +554,8 @@ static int32_t sa2ul_aes_key_expand_enc(uint32_t *rk, uint32_t *cipherKey, int32
     rk[4] = cipherKey[4]; rk[5] = cipherKey[5];
     /* This driver only ever calls with 128 or 256 -- 192 omitted
      * (matches AES-192 being unsupported by this hardware/port, see
-     * check_aes_keylength() in wolfcrypt/src/port/ti/ti-sa2ul_port.c). */
+     * check_aes_keylength() in
+     * wolfcrypt/src/port/ti/ti-sa2ul_a53_integrity_port.c). */
 
     rk[6] = cipherKey[6]; rk[7] = cipherKey[7];
     if (keyBits == 256) {
@@ -1063,8 +1064,8 @@ int sa2ul_driver_aes(struct Sa2ulCtrl *Ctrl, MemoryRegion DataMr,
          * wolfCrypt's own software GHASH setup). Left zeroed -- matches
          * this driver only supporting the GCM_NONCE_MID_SZ (12-byte IV)
          * case, which sa2ul_context_alloc() above always takes (see
-         * ti-sa2ul_port.c: only ivSz==GCM_NONCE_MID_SZ is forwarded
-         * here; anything else stays CRYPTOCB_UNAVAILABLE). */
+         * ti-sa2ul_a53_integrity_port.c: only ivSz==GCM_NONCE_MID_SZ is
+         * forwarded here; anything else stays CRYPTOCB_UNAVAILABLE). */
         break;
     default:
         Ctrl->ret = SA2UL_DRIVER_BAD_ARG;

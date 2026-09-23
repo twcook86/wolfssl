@@ -1,4 +1,4 @@
-/* ti-sa2ul_port.c
+/* ti-sa2ul_a53_integrity_port.c
  *
  * Copyright (C) 2006-2026 wolfSSL Inc.
  *
@@ -26,16 +26,16 @@
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
 
-#if defined(WOLFSSL_TI_AM64X)
+#if defined(WOLFSSL_TI_AM64X_A53_INTEGRITY)
 
 #ifndef WOLF_CRYPTO_CB
-    #error WOLFSSL_TI_AM64X support requires ./configure --enable-cryptocb or WOLF_CRYPTO_CB to be defined
+    #error WOLFSSL_TI_AM64X_A53_INTEGRITY support requires ./configure --enable-cryptocb or WOLF_CRYPTO_CB to be defined
 #endif
 
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/cryptocb.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
-#include <wolfssl/wolfcrypt/port/ti/ti-sa2ul_port.h>
+#include <wolfssl/wolfcrypt/port/ti/ti-sa2ul_a53_integrity_port.h>
 
 #ifdef WOLFSSL_SA2UL_DRIVER
 #include <INTEGRITY.h>
@@ -193,7 +193,7 @@ static const void *gSa2ulHashOwner = NULL;
 
 #endif /* WOLFSSL_SA2UL_DRIVER */
 
-#if !defined(NO_AES) && !defined(WOLFSSL_TI_AM64X_NO_AES)
+#if !defined(NO_AES) && !defined(WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_AES)
 static int check_aes_keylength(word32 keylen)
 {
     if (keylen != AES_128_KEY_SIZE && keylen != AES_256_KEY_SIZE)
@@ -467,9 +467,9 @@ static int ti_sa2ul_AesGcmDecrypt(Aes* aes, byte* out,
 }
 #endif /* HAVE_AES_DECRYPT */
 #endif /* HAVE_AESGCM */
-#endif /* !NO_AES && !WOLFSSL_TI_AM64X_NO_AES */
+#endif /* !NO_AES && !WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_AES */
 
-#if !defined(WOLFSSL_TI_AM64X_NO_SHA) && (!defined(NO_SHA256) || defined(WOLFSSL_SHA512))
+#if !defined(WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_SHA) && (!defined(NO_SHA256) || defined(WOLFSSL_SHA512))
 #ifndef NO_SHA256
 static int ti_sa2ul_Sha256Hash(wc_Sha256* sha256, const byte* in,
         word32 inSz, byte* digest)
@@ -641,7 +641,7 @@ static int ti_sa2ul_Sha512Teardown(wc_Sha512* sha512)
 #endif
 }
 #endif /* WOLFSSL_SHA512 */
-#endif /* !WOLFSSL_TI_AM64X_NO_SHA && (!NO_SHA256 || WOLFSSL_SHA512) */
+#endif /* !WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_SHA && (!NO_SHA256 || WOLFSSL_SHA512) */
 
 static int ti_sa2ul_CryptoDevCb(int devId, wc_CryptoInfo* info, void* devCtx)
 {
@@ -662,7 +662,7 @@ static int ti_sa2ul_CryptoDevCb(int devId, wc_CryptoInfo* info, void* devCtx)
 
     if (info->algo_type == WC_ALGO_TYPE_CIPHER)
     {
-#if !defined(NO_AES) && !defined(WOLFSSL_TI_AM64X_NO_AES)
+#if !defined(NO_AES) && !defined(WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_AES)
         if (0) {
             /* nothing */
         }
@@ -763,11 +763,11 @@ static int ti_sa2ul_CryptoDevCb(int devId, wc_CryptoInfo* info, void* devCtx)
 #  endif /* HAVE_AES_DECRYPT */
         }
 # endif /* HAVE_AESGCM */
-#endif /* !NO_AES && !WOLFSSL_TI_AM64X_NO_AES */
+#endif /* !NO_AES && !WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_AES */
     }
     else if (info->algo_type == WC_ALGO_TYPE_HASH)
     {
-#if !defined(WOLFSSL_TI_AM64X_NO_SHA) && (!defined(NO_SHA256) || defined(WOLFSSL_SHA512))
+#if !defined(WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_SHA) && (!defined(NO_SHA256) || defined(WOLFSSL_SHA512))
         if (0) {
             /* nothing */
         }
@@ -792,12 +792,12 @@ static int ti_sa2ul_CryptoDevCb(int devId, wc_CryptoInfo* info, void* devCtx)
                 }
         }
 # endif /* WOLFSSL_SHA512 */
-#endif /* !WOLFSSL_TI_AM64X_NO_SHA && (!NO_SHA256 || WOLFSSL_SHA512) */
+#endif /* !WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_SHA && (!NO_SHA256 || WOLFSSL_SHA512) */
     }
 #ifdef WOLF_CRYPTO_CB_FREE
     else if (info->algo_type == WC_ALGO_TYPE_FREE)
     {
-# if !defined(WOLFSSL_TI_AM64X_NO_SHA) && (!defined(NO_SHA256) || defined(WOLFSSL_SHA512))
+# if !defined(WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_SHA) && (!defined(NO_SHA256) || defined(WOLFSSL_SHA512))
         if (info->free.algo == WC_ALGO_TYPE_HASH) {
             if (0) {
                 /* nothing */
@@ -820,7 +820,7 @@ static int ti_sa2ul_CryptoDevCb(int devId, wc_CryptoInfo* info, void* devCtx)
             }
 #  endif /* WOLFSSL_SHA512 */
         }
-# endif /* !WOLFSSL_TI_AM64X_NO_SHA && (!NO_SHA256 || WOLFSSL_SHA512) */
+# endif /* !WOLFSSL_TI_AM64X_A53_INTEGRITY_NO_SHA && (!NO_SHA256 || WOLFSSL_SHA512) */
     }
 #endif /* WOLF_CRYPTO_CB_FREE */
 
@@ -833,4 +833,4 @@ int ti_sa2ul_port_init(void)
                                        ti_sa2ul_CryptoDevCb, NULL);
 }
 
-#endif /* WOLFSSL_TI_AM64X */
+#endif /* WOLFSSL_TI_AM64X_A53_INTEGRITY */

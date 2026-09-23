@@ -1,4 +1,4 @@
-/* ti-sa2ul_port.h
+/* ti-sa2ul_a53_integrity_port.h
  *
  * Copyright (C) 2006-2026 wolfSSL Inc.
  *
@@ -19,16 +19,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef _TI_SA2UL_PORT_H_
-#define _TI_SA2UL_PORT_H_
+#ifndef _TI_SA2UL_A53_INTEGRITY_PORT_H_
+#define _TI_SA2UL_A53_INTEGRITY_PORT_H_
 
-#if defined(WOLFSSL_TI_AM64X)
+#if defined(WOLFSSL_TI_AM64X_A53_INTEGRITY)
 
 #define WOLFSSL_TI_SA2UL_DEVID 8888
 #define WC_USE_DEVID WOLFSSL_TI_SA2UL_DEVID
 
 int ti_sa2ul_port_init(void);
 
-#endif /* WOLFSSL_TI_AM64X */
+#endif /* WOLFSSL_TI_AM64X_A53_INTEGRITY */
 
-#endif /* _TI_SA2UL_PORT_H_ */
+#endif /* _TI_SA2UL_A53_INTEGRITY_PORT_H_ */
