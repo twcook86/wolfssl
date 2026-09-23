@@ -159,7 +159,7 @@ int integrity_rand_generate_seed(unsigned char* output, unsigned int sz);
 #define NO_PSK
 #define NO_PWDBASED
 
-#define WOLFSSL_TI_AM64X
+#define WOLFSSL_TI_AM64X_A53_INTEGRITY
 #define HAVE_AES_ECB
 #define WOLFSSL_SHA512_HASHTYPE
 #ifndef WOLF_CRYPTO_CB

@@ -56,7 +56,7 @@ enum Sa2ulOp {
 
 /* struct Sa2ulCtrl.ret's values -- set by sa2ul_driver_aes()/
  * sa2ul_driver_sha() (sa2ul_driver.c, Kernel-linked) and read back by
- * ti_sa2ul_IodeviceCall() (ti-sa2ul_port.c, Task-linked). */
+ * ti_sa2ul_IodeviceCall() (ti-sa2ul_a53_integrity_port.c, Task-linked). */
 #define SA2UL_DRIVER_OK             0
 #define SA2UL_DRIVER_BAD_ARG        1  /* bad size/key length/etc. */
 #define SA2UL_DRIVER_NOT_READY      2  /* sa2ul_driver_set_dma() never called

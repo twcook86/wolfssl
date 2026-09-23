@@ -50,4 +50,4 @@ wolfcrypt/src/port/arm/armv8-sha256-asm_c.c
 wolfcrypt/src/port/arm/armv8-sha512-asm_c.c
 
 IDE/INTEGRITY/integrity_port.c
-wolfcrypt/src/port/ti/ti-sa2ul_port.c
+wolfcrypt/src/port/ti/ti-sa2ul_a53_integrity_port.c
