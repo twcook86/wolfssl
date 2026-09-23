@@ -19,39 +19,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* WOLF_CRYPTO_CB device for the AM64x SA2UL: registers itself as a
- * crypto callback device and gets first refusal at AES-CBC/ECB/GCM and
- * SHA256/SHA512 operations before wolfCrypt's own software falls back.
- *
- * STAGED PORT -- STUBBED, NOT YET HARDWARE-ACCELERATED. Ported from
- * wolfSSL's TI AM64x SA2UL port (wolfBoot's lib/wolfssl,
- * wolfcrypt/src/port/ti/ti-sa2ul_port.c, WOLFSSL_TI_AM64X), which drives
- * the real hardware through TI's mcu_plus_sdk_am64x SA2UL driver
- * (security/security_common/drivers/crypto/sa2ul/sa2ul.h and friends).
- * That SDK is not part of this tree yet ("we will port over the mcu
- * plus sdk stuff later"), so every per-algorithm handler below is a
- * stub that returns CRYPTOCB_UNAVAILABLE -- wolfCrypt's documented
- * signal to fall back to its own software implementation. Nothing here
- * touches SA2UL hardware yet; this just gets the WOLF_CRYPTO_CB
- * plumbing (device registration, the algo_type/cipher.type/hash.type
- * dispatch shape, WC_USE_DEVID wiring into wolfcrypt_test()/
- * benchmark_test()) in place and exercised end to end first.
- *
- * To finish this port later: open wolfBoot's ti-sa2ul_port.c side by
- * side with this file and, function by function, replace each stub
- * body below with the real SA2UL_ContextParams/SA2UL_contextAlloc/
- * SA2UL_contextProcess/SA2UL_contextFree sequence from there (each stub
- * names its upstream counterpart). That also means adding an
- * SA2UL_ContextObject-typed context field (upstream calls it scObj) to
- * struct Aes/wc_Sha256/wc_Sha512 (wolfssl/wolfcrypt/aes.h/sha256.h/
- * sha512.h) -- deliberately not added here, since its type only exists
- * once sa2ul.h is ported.
- *
- * TRNG acceleration is deliberately NOT ported here at all -- see
- * ti-sa2ul_port.h's header comment. This file's own hardware init
- * (Crypto_open() in upstream) is skipped for the same staged reason:
- * ti_sa2ul_port_init() below only registers the (stubbed) crypto
- * callback device.
+/* WOLF_CRYPTO_CB device for the AM64x SA2UL: registers itself as a crypto
+ * callback device and gets first refusal at AES-CBC/ECB/GCM and SHA256/512
+ * operations before wolfCrypt's own software falls back.
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -67,13 +37,165 @@
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/port/ti/ti-sa2ul_port.h>
 
+#ifdef WOLFSSL_SA2UL_DRIVER
+#include <INTEGRITY.h>
+#include <string.h>
+#include <wolfssl/wolfcrypt/wc_encrypt.h> /* GCM_NONCE_MID_SZ */
+#include "sa2ul_iodevice.h"
+
+static IODevice gSa2ulDev = NULL;
+static MemoryRegion gSa2ulCtrlMr = NULLMemoryRegion;
+static MemoryRegion gSa2ulDataMr = NULLMemoryRegion;
+static volatile struct Sa2ulCtrl *gSa2ulCtrl = NULL;
+static volatile struct Sa2ulData *gSa2ulData = NULL;
+
+#include "myproject_integrate.h"
+
+static int ti_sa2ul_iodevice_open(void)
+{
+    Address VirtFirst, VirtLast;
+
+    if (gSa2ulDev != NULL) {
+        return 0;
+    }
+    if (RequestResource((Object *)&gSa2ulDev, SA2UL_IODEVICE_NAME,
+            "!systempassword") != Success) {
+        gSa2ulDev = NULL;
+        return -1;
+    }
+
+    gSa2ulCtrlMr = sa2ul_ctrl_local;
+    if (GetMemoryRegionAddresses(gSa2ulCtrlMr, &VirtFirst, &VirtLast) != Success ||
+            (VirtLast - VirtFirst + 1) < sizeof(struct Sa2ulCtrl)) {
+        gSa2ulDev = NULL;
+        return -1;
+    }
+    gSa2ulCtrl = (volatile struct Sa2ulCtrl *)VirtFirst;
+
+    gSa2ulDataMr = sa2ul_data_local;
+    if (GetMemoryRegionAddresses(gSa2ulDataMr, &VirtFirst, &VirtLast) != Success ||
+            (VirtLast - VirtFirst + 1) < sizeof(struct Sa2ulData)) {
+        gSa2ulDev = NULL;
+        return -1;
+    }
+    gSa2ulData = (volatile struct Sa2ulData *)VirtFirst;
+
+    return 0;
+}
+
+static int ti_sa2ul_IodeviceCall(struct Sa2ulCtrl *Ctrl, const byte *In,
+        word32 InSz, byte *Out, word32 OutSz)
+{
+    byte dummy = 0;
+
+    if (ti_sa2ul_iodevice_open() != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (InSz > SA2UL_MAX_BUF || OutSz > SA2UL_MAX_BUF) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    if (In != NULL && InSz != 0u) {
+        if (CopyToMemoryRegionWithFlags(gSa2ulDataMr,
+                (ExtendedAddress)(uintptr_t)gSa2ulData, (void *)In, InSz,
+                ACCESS_DST_COHERENT) != Success) {
+            return CRYPTOCB_UNAVAILABLE;
+        }
+    }
+
+    if (CopyToMemoryRegionWithFlags(gSa2ulCtrlMr,
+            (ExtendedAddress)(uintptr_t)gSa2ulCtrl, Ctrl, sizeof(*Ctrl),
+            ACCESS_DST_COHERENT) != Success) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    if (ReadIODeviceStatus(gSa2ulDev, SA2UL_IODEVICE_STATUS_NUMBER,
+            &dummy, 1) != Success) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    if (CopyFromMemoryRegionWithFlags(gSa2ulCtrlMr,
+            (ExtendedAddress)(uintptr_t)gSa2ulCtrl, Ctrl, sizeof(*Ctrl),
+            ACCESS_SRC_COHERENT) != Success) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    if (Out != NULL && OutSz != 0u) {
+        if (CopyFromMemoryRegionWithFlags(gSa2ulDataMr,
+                (ExtendedAddress)(uintptr_t)gSa2ulData, Out, OutSz,
+                ACCESS_SRC_COHERENT) != Success) {
+            return CRYPTOCB_UNAVAILABLE;
+        }
+    }
+
+    return 0;
+}
+
+#ifndef SA2UL_AES_KEY_CACHE_SIZE
+#define SA2UL_AES_KEY_CACHE_SIZE 4
+#endif
+
+struct Sa2ulAesKeyCacheEntry {
+    const Aes *owner;
+    byte key[SA2UL_MAX_KEY_BYTES];
+    word32 keySz;
+};
+
+static struct Sa2ulAesKeyCacheEntry gSa2ulAesKeyCache[SA2UL_AES_KEY_CACHE_SIZE];
+static unsigned int gSa2ulAesKeyCacheNext = 0;
+
+static void ti_sa2ul_AesCacheKey(const Aes *aes, const byte *key, word32 keySz)
+{
+    unsigned int i;
+
+    if (keySz > SA2UL_MAX_KEY_BYTES) {
+        return; /* can't happen for 128/256-bit AES keys, but stay safe */
+    }
+    for (i = 0; i < SA2UL_AES_KEY_CACHE_SIZE; i++) {
+        if (gSa2ulAesKeyCache[i].owner == aes) {
+            memcpy(gSa2ulAesKeyCache[i].key, key, keySz);
+            gSa2ulAesKeyCache[i].keySz = keySz;
+            return;
+        }
+    }
+    i = gSa2ulAesKeyCacheNext;
+    gSa2ulAesKeyCacheNext = (gSa2ulAesKeyCacheNext + 1u) % SA2UL_AES_KEY_CACHE_SIZE;
+    gSa2ulAesKeyCache[i].owner = aes;
+    memcpy(gSa2ulAesKeyCache[i].key, key, keySz);
+    gSa2ulAesKeyCache[i].keySz = keySz;
+}
+
+/* Returns 0 and fills *KeyOut and *KeySzOut on a cache hit, -1 on a miss. */
+static int ti_sa2ul_AesLookupKey(const Aes *aes, byte KeyOut[SA2UL_MAX_KEY_BYTES],
+        word32 *KeySzOut)
+{
+    unsigned int i;
+
+    for (i = 0; i < SA2UL_AES_KEY_CACHE_SIZE; i++) {
+        if (gSa2ulAesKeyCache[i].owner == aes) {
+            memcpy(KeyOut, gSa2ulAesKeyCache[i].key, gSa2ulAesKeyCache[i].keySz);
+            *KeySzOut = gSa2ulAesKeyCache[i].keySz;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static int ti_sa2ul_AesSetKey(Aes *aes, const byte *key, word32 keySz)
+{
+    ti_sa2ul_AesCacheKey(aes, key, keySz);
+    return CRYPTOCB_UNAVAILABLE;
+}
+
+static byte gSa2ulHashAccum[SA2UL_MAX_BUF];
+static word32 gSa2ulHashAccumLen = 0;
+static const void *gSa2ulHashOwner = NULL;
+
+#endif /* WOLFSSL_SA2UL_DRIVER */
+
 #if !defined(NO_AES) && !defined(WOLFSSL_TI_AM64X_NO_AES)
 static int check_aes_keylength(word32 keylen)
 {
-    /* The mcu_plus_sdk SA2UL driver only supports key lengths of 128 and
-     * 256 -- kept here (SDK-independent logic) so the real handlers
-     * inherit the right fallback-to-software behavior for AES-192 once
-     * they're filled in. */
     if (keylen != AES_128_KEY_SIZE && keylen != AES_256_KEY_SIZE)
         return BAD_FUNC_ARG;
 
@@ -95,8 +217,37 @@ static int check_aes_keylength(word32 keylen)
 static int ti_sa2ul_AesCbcEncrypt(Aes* aes, byte* out, const byte* in,
         word32 sz)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    struct Sa2ulCtrl ctrl;
+    byte key[SA2UL_MAX_KEY_BYTES];
+    word32 keySz;
+
+    if (sz == 0u || (sz % WC_AES_BLOCK_SIZE) != 0u || sz > SA2UL_MAX_BUF) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (ti_sa2ul_AesLookupKey(aes, key, &keySz) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    memset(&ctrl, 0, sizeof(ctrl));
+    ctrl.op = SA2UL_OP_AES_CBC_ENCRYPT;
+    ctrl.sz = sz;
+    ctrl.keyBytes = keySz;
+    memcpy(ctrl.key, key, keySz);
+    memcpy(ctrl.iv, aes->reg, WC_AES_BLOCK_SIZE);
+
+    if (ti_sa2ul_IodeviceCall(&ctrl, in, sz, out, sz) != 0 ||
+            ctrl.ret != SA2UL_DRIVER_OK) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    memcpy(aes->reg, out + sz - WC_AES_BLOCK_SIZE, WC_AES_BLOCK_SIZE);
+
+    return 0;
+#else
     (void)aes; (void)out; (void)in; (void)sz;
     return CRYPTOCB_UNAVAILABLE;
+#endif
 }
 
 #ifdef HAVE_AES_DECRYPT
@@ -104,28 +255,110 @@ static int ti_sa2ul_AesCbcEncrypt(Aes* aes, byte* out, const byte* in,
 static int ti_sa2ul_AesCbcDecrypt(Aes* aes, byte* out, const byte* in,
         word32 sz)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    struct Sa2ulCtrl ctrl;
+    byte key[SA2UL_MAX_KEY_BYTES];
+    word32 keySz;
+    byte nextIv[WC_AES_BLOCK_SIZE];
+
+    if (sz == 0u || (sz % WC_AES_BLOCK_SIZE) != 0u || sz > SA2UL_MAX_BUF) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (ti_sa2ul_AesLookupKey(aes, key, &keySz) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    memcpy(nextIv, in + sz - WC_AES_BLOCK_SIZE, WC_AES_BLOCK_SIZE);
+
+    memset(&ctrl, 0, sizeof(ctrl));
+    ctrl.op = SA2UL_OP_AES_CBC_DECRYPT;
+    ctrl.sz = sz;
+    ctrl.keyBytes = keySz;
+    memcpy(ctrl.key, key, keySz);
+    memcpy(ctrl.iv, aes->reg, WC_AES_BLOCK_SIZE);
+
+    if (ti_sa2ul_IodeviceCall(&ctrl, in, sz, out, sz) != 0 ||
+            ctrl.ret != SA2UL_DRIVER_OK) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    memcpy(aes->reg, nextIv, WC_AES_BLOCK_SIZE);
+
+    return 0;
+#else
     (void)aes; (void)out; (void)in; (void)sz;
     return CRYPTOCB_UNAVAILABLE;
+#endif
 }
 #endif /* HAVE_AES_DECRYPT */
 #endif /* HAVE_AES_CBC */
 
 #ifdef HAVE_AES_ECB
-/* TODO(mcu_plus_sdk port): upstream's ti_sa2ul_AesEcbEncrypt(). */
 static int ti_sa2ul_AesEcbEncrypt(Aes* aes, byte* out, const byte* in,
         word32 sz)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    struct Sa2ulCtrl ctrl;
+    byte key[SA2UL_MAX_KEY_BYTES];
+    word32 keySz;
+
+    if (sz == 0u || (sz % WC_AES_BLOCK_SIZE) != 0u || sz > SA2UL_MAX_BUF) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (ti_sa2ul_AesLookupKey(aes, key, &keySz) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    memset(&ctrl, 0, sizeof(ctrl));
+    ctrl.op = SA2UL_OP_AES_ECB_ENCRYPT;
+    ctrl.sz = sz;
+    ctrl.keyBytes = keySz;
+    memcpy(ctrl.key, key, keySz);
+
+    if (ti_sa2ul_IodeviceCall(&ctrl, in, sz, out, sz) != 0 ||
+            ctrl.ret != SA2UL_DRIVER_OK) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    return 0;
+#else
     (void)aes; (void)out; (void)in; (void)sz;
     return CRYPTOCB_UNAVAILABLE;
+#endif
 }
 
 #ifdef HAVE_AES_DECRYPT
-/* TODO(mcu_plus_sdk port): upstream's ti_sa2ul_AesEcbDecrypt(). */
 static int ti_sa2ul_AesEcbDecrypt(Aes* aes, byte* out, const byte* in,
         word32 sz)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    struct Sa2ulCtrl ctrl;
+    byte key[SA2UL_MAX_KEY_BYTES];
+    word32 keySz;
+
+    if (sz == 0u || (sz % WC_AES_BLOCK_SIZE) != 0u || sz > SA2UL_MAX_BUF) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (ti_sa2ul_AesLookupKey(aes, key, &keySz) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    memset(&ctrl, 0, sizeof(ctrl));
+    ctrl.op = SA2UL_OP_AES_ECB_DECRYPT;
+    ctrl.sz = sz;
+    ctrl.keyBytes = keySz;
+    memcpy(ctrl.key, key, keySz);
+
+    if (ti_sa2ul_IodeviceCall(&ctrl, in, sz, out, sz) != 0 ||
+            ctrl.ret != SA2UL_DRIVER_OK) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    return 0;
+#else
     (void)aes; (void)out; (void)in; (void)sz;
     return CRYPTOCB_UNAVAILABLE;
+#endif
 }
 #endif /* HAVE_AES_DECRYPT */
 #endif /* HAVE_AES_ECB */
@@ -138,24 +371,99 @@ static int ti_sa2ul_AesGcmEncrypt(Aes* aes, byte* out,
         byte* authTag, word32 authTagSz,
         const byte* authIn, word32 authInSz)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    struct Sa2ulCtrl ctrl;
+    byte key[SA2UL_MAX_KEY_BYTES];
+    word32 keySz;
+
+    if (sz == 0u || sz > SA2UL_MAX_BUF || ivSz != GCM_NONCE_MID_SZ ||
+            authInSz > SA2UL_MAX_AAD_BYTES || authTagSz > SA2UL_MAX_TAG_BYTES) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (ti_sa2ul_AesLookupKey(aes, key, &keySz) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    memset(&ctrl, 0, sizeof(ctrl));
+    ctrl.op = SA2UL_OP_AES_GCM_ENCRYPT;
+    ctrl.sz = sz;
+    ctrl.keyBytes = keySz;
+    memcpy(ctrl.key, key, keySz);
+    ctrl.ivSz = ivSz;
+    memcpy(ctrl.iv, iv, ivSz);
+    ctrl.aadSz = authInSz;
+    if (authInSz != 0u) {
+        memcpy(ctrl.aad, authIn, authInSz);
+    }
+
+    if (ti_sa2ul_IodeviceCall(&ctrl, in, sz, out, sz) != 0 ||
+            ctrl.ret != SA2UL_DRIVER_OK) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    if (authTag != NULL) {
+        memcpy(authTag, ctrl.tagOut, authTagSz);
+    }
+
+    return 0;
+#else
     (void)aes; (void)out; (void)in; (void)sz;
     (void)iv; (void)ivSz; (void)authTag; (void)authTagSz;
     (void)authIn; (void)authInSz;
     return CRYPTOCB_UNAVAILABLE;
+#endif
 }
 
 #ifdef HAVE_AES_DECRYPT
-/* TODO(mcu_plus_sdk port): upstream's ti_sa2ul_AesGcmDecrypt(). */
 static int ti_sa2ul_AesGcmDecrypt(Aes* aes, byte* out,
         const byte* in, word32 sz,
         const byte* iv, word32 ivSz,
         const byte* authTag, word32 authTagSz,
         const byte* authIn, word32 authInSz)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    struct Sa2ulCtrl ctrl;
+    byte key[SA2UL_MAX_KEY_BYTES];
+    word32 keySz;
+
+    if (sz == 0u || sz > SA2UL_MAX_BUF || ivSz != GCM_NONCE_MID_SZ ||
+            authInSz > SA2UL_MAX_AAD_BYTES || authTagSz > SA2UL_MAX_TAG_BYTES) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (ti_sa2ul_AesLookupKey(aes, key, &keySz) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    memset(&ctrl, 0, sizeof(ctrl));
+    ctrl.op = SA2UL_OP_AES_GCM_DECRYPT;
+    ctrl.sz = sz;
+    ctrl.keyBytes = keySz;
+    memcpy(ctrl.key, key, keySz);
+    ctrl.ivSz = ivSz;
+    memcpy(ctrl.iv, iv, ivSz);
+    ctrl.aadSz = authInSz;
+    if (authInSz != 0u) {
+        memcpy(ctrl.aad, authIn, authInSz);
+    }
+    memcpy(ctrl.tagIn, authTag, authTagSz);
+
+    if (ti_sa2ul_IodeviceCall(&ctrl, in, sz, out, sz) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    if (ctrl.ret == SA2UL_DRIVER_AUTH_FAILED) {
+        return WC_NO_ERR_TRACE(AES_GCM_AUTH_E);
+    }
+    if (ctrl.ret != SA2UL_DRIVER_OK) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    return 0;
+#else
     (void)aes; (void)out; (void)in; (void)sz;
     (void)iv; (void)ivSz; (void)authTag; (void)authTagSz;
     (void)authIn; (void)authInSz;
     return CRYPTOCB_UNAVAILABLE;
+#endif
 }
 #endif /* HAVE_AES_DECRYPT */
 #endif /* HAVE_AESGCM */
@@ -163,41 +471,174 @@ static int ti_sa2ul_AesGcmDecrypt(Aes* aes, byte* out,
 
 #if !defined(WOLFSSL_TI_AM64X_NO_SHA) && (!defined(NO_SHA256) || defined(WOLFSSL_SHA512))
 #ifndef NO_SHA256
-/* TODO(mcu_plus_sdk port): upstream's ti_sa2ul_Sha256Hash() (block-by-
- * block SA2UL_contextProcess(), matching wolfCrypt's usual incremental
- * hash update/final shape -- see wolfBoot's version for the full leftover-
- * buffering state machine). */
 static int ti_sa2ul_Sha256Hash(wc_Sha256* sha256, const byte* in,
         word32 inSz, byte* digest)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    if (in == NULL && digest == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    if ((sha256->flags & WC_HASH_FLAG_ISCOPY) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    if (in != NULL) {
+        /* Update */
+        if (gSa2ulHashOwner != NULL && gSa2ulHashOwner != sha256) {
+            sha256->flags |= WC_HASH_FLAG_ISCOPY;
+            return CRYPTOCB_UNAVAILABLE;
+        }
+        if (gSa2ulHashOwner == NULL) {
+            if (ti_sa2ul_iodevice_open() != 0) {
+                return CRYPTOCB_UNAVAILABLE;
+            }
+            gSa2ulHashOwner = sha256;
+            gSa2ulHashAccumLen = 0;
+        }
+        if ((word64)gSa2ulHashAccumLen + inSz > sizeof(gSa2ulHashAccum)) {
+            int ret;
+
+            sha256->flags |= WC_HASH_FLAG_ISCOPY;
+            gSa2ulHashOwner = NULL;
+            ret = wc_Sha256Update(sha256, gSa2ulHashAccum, gSa2ulHashAccumLen);
+            gSa2ulHashAccumLen = 0;
+            if (ret != 0) {
+                return ret;
+            }
+            return wc_Sha256Update(sha256, in, inSz);
+        }
+        memcpy(gSa2ulHashAccum + gSa2ulHashAccumLen, in, inSz);
+        gSa2ulHashAccumLen += inSz;
+        return 0;
+    }
+    else {
+        /* Final */
+        struct Sa2ulCtrl ctrl;
+        int ret;
+
+        if (gSa2ulHashOwner != sha256) {
+            return CRYPTOCB_UNAVAILABLE;
+        }
+
+        memset(&ctrl, 0, sizeof(ctrl));
+        ctrl.op = SA2UL_OP_SHA256;
+        ctrl.sz = gSa2ulHashAccumLen;
+
+        ret = ti_sa2ul_IodeviceCall(&ctrl, gSa2ulHashAccum, gSa2ulHashAccumLen,
+                NULL, 0);
+        gSa2ulHashOwner = NULL;
+        gSa2ulHashAccumLen = 0;
+        if (ret != 0 || ctrl.ret != SA2UL_DRIVER_OK) {
+            return WC_HW_E;
+        }
+
+        memcpy(digest, ctrl.digestOut, WC_SHA256_DIGEST_SIZE);
+        return 0;
+    }
+#else
     (void)sha256; (void)in; (void)inSz; (void)digest;
     return CRYPTOCB_UNAVAILABLE;
+#endif
 }
 
-/* TODO(mcu_plus_sdk port): upstream's ti_sa2ul_Sha256Teardown() (only
- * needed once ti_sa2ul_Sha256Hash() above can actually leave a SA2UL
- * hardware context allocated for this wc_Sha256 to tear down). */
+/* TODO(mcu_plus_sdk port): upstream's ti_sa2ul_Sha256Teardown(). */
 static int ti_sa2ul_Sha256Teardown(wc_Sha256* sha256)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    if (gSa2ulHashOwner == sha256) {
+        gSa2ulHashOwner = NULL;
+        gSa2ulHashAccumLen = 0;
+    }
+    return 0;
+#else
     (void)sha256;
     return 0;
+#endif
 }
 #endif /* !NO_SHA256 */
 
 #ifdef WOLFSSL_SHA512
-/* TODO(mcu_plus_sdk port): upstream's ti_sa2ul_Sha512Hash(). */
 static int ti_sa2ul_Sha512Hash(wc_Sha512* sha512, const byte* in,
         word32 inSz, byte* digest)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    if (in == NULL && digest == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    if ((sha512->flags & WC_HASH_FLAG_ISCOPY) != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    if (in != NULL) {
+        if (gSa2ulHashOwner != NULL && gSa2ulHashOwner != sha512) {
+            sha512->flags |= WC_HASH_FLAG_ISCOPY;
+            return CRYPTOCB_UNAVAILABLE;
+        }
+        if (gSa2ulHashOwner == NULL) {
+            if (ti_sa2ul_iodevice_open() != 0) {
+                return CRYPTOCB_UNAVAILABLE;
+            }
+            gSa2ulHashOwner = sha512;
+            gSa2ulHashAccumLen = 0;
+        }
+        if ((word64)gSa2ulHashAccumLen + inSz > sizeof(gSa2ulHashAccum)) {
+            int ret;
+
+            sha512->flags |= WC_HASH_FLAG_ISCOPY;
+            gSa2ulHashOwner = NULL;
+            ret = wc_Sha512Update(sha512, gSa2ulHashAccum, gSa2ulHashAccumLen);
+            gSa2ulHashAccumLen = 0;
+            if (ret != 0) {
+                return ret;
+            }
+            return wc_Sha512Update(sha512, in, inSz);
+        }
+        memcpy(gSa2ulHashAccum + gSa2ulHashAccumLen, in, inSz);
+        gSa2ulHashAccumLen += inSz;
+        return 0;
+    }
+    else {
+        struct Sa2ulCtrl ctrl;
+        int ret;
+
+        if (gSa2ulHashOwner != sha512) {
+            return CRYPTOCB_UNAVAILABLE;
+        }
+
+        memset(&ctrl, 0, sizeof(ctrl));
+        ctrl.op = SA2UL_OP_SHA512;
+        ctrl.sz = gSa2ulHashAccumLen;
+
+        ret = ti_sa2ul_IodeviceCall(&ctrl, gSa2ulHashAccum, gSa2ulHashAccumLen,
+                NULL, 0);
+        gSa2ulHashOwner = NULL;
+        gSa2ulHashAccumLen = 0;
+        if (ret != 0 || ctrl.ret != SA2UL_DRIVER_OK) {
+            return WC_HW_E;
+        }
+
+        memcpy(digest, ctrl.digestOut, WC_SHA512_DIGEST_SIZE);
+        return 0;
+    }
+#else
     (void)sha512; (void)in; (void)inSz; (void)digest;
     return CRYPTOCB_UNAVAILABLE;
+#endif
 }
 
 /* TODO(mcu_plus_sdk port): upstream's ti_sa2ul_Sha512Teardown(). */
 static int ti_sa2ul_Sha512Teardown(wc_Sha512* sha512)
 {
+#ifdef WOLFSSL_SA2UL_DRIVER
+    if (gSa2ulHashOwner == sha512) {
+        gSa2ulHashOwner = NULL;
+        gSa2ulHashAccumLen = 0;
+    }
+    return 0;
+#else
     (void)sha512;
     return 0;
+#endif
 }
 #endif /* WOLFSSL_SHA512 */
 #endif /* !WOLFSSL_TI_AM64X_NO_SHA && (!NO_SHA256 || WOLFSSL_SHA512) */
@@ -225,6 +666,13 @@ static int ti_sa2ul_CryptoDevCb(int devId, wc_CryptoInfo* info, void* devCtx)
         if (0) {
             /* nothing */
         }
+# if defined(WOLFSSL_SA2UL_DRIVER) && defined(WOLF_CRYPTO_CB_AES_SETKEY)
+        else if (info->cipher.type == WC_CIPHER_AES) {
+            ret = ti_sa2ul_AesSetKey(info->cipher.aessetkey.aes,
+                                      info->cipher.aessetkey.key,
+                                      info->cipher.aessetkey.keySz);
+        }
+# endif /* WOLFSSL_SA2UL_DRIVER && WOLF_CRYPTO_CB_AES_SETKEY */
 # if defined(HAVE_AES_CBC)
         else if (info->cipher.type == WC_CIPHER_AES_CBC) {
             Aes* aes = info->cipher.aescbc.aes;
@@ -381,12 +829,6 @@ static int ti_sa2ul_CryptoDevCb(int devId, wc_CryptoInfo* info, void* devCtx)
 
 int ti_sa2ul_port_init(void)
 {
-    /* TODO(mcu_plus_sdk port): upstream also brings up the TRNG here
-     * (this project's TRNG is rng_driver.c instead -- see this file's
-     * header comment) and opens the real SA2UL hardware context
-     * (Crypto_open(&cryptoCtx)) before registering the callback device.
-     * Skipped for now: every handler above is a stub, so there's no
-     * hardware context to open yet. */
     return wc_CryptoCb_RegisterDevice(WOLFSSL_TI_SA2UL_DEVID,
                                        ti_sa2ul_CryptoDevCb, NULL);
 }

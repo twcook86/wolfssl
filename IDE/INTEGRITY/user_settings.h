@@ -167,6 +167,12 @@ int integrity_rand_generate_seed(unsigned char* output, unsigned int sz);
 #endif
 #define WOLF_CRYPTO_CB_FREE
 
+/* these are turned off until we can integrate with the correct integrity bsp */
+#if 0
+    #define WOLFSSL_SA2UL_DRIVER
+    #define WOLF_CRYPTO_CB_AES_SETKEY
+#endif
+
 #define WOLFSSL_STATIC_MEMORY
 #define WOLFSSL_STATIC_MEMORY_TEST_SZ (256 * 1024)
 #define BENCH_EMBEDDED

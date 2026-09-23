@@ -41,7 +41,6 @@
 
 #define TRNG_STATUS_READY_MASK   0x1u  /* bit 0 */
 
-/* ------------------------------------------------------------------ */
 
 static volatile uint8_t *gTrngBase = NULL;
 
@@ -95,12 +94,12 @@ static void rng_lock(void)
         /* either already held, or another core won the store race --
          * either way, loop back to a fresh __LDXR32() and try again */
     }
-    __DMB(); /* acquire: nothing below this line may be reordered above it */
+    __DMB();
 }
 
 static void rng_unlock(void)
 {
-    __DMB(); /* release: everything above this line must land first */
+    __DMB();
     gRngLock = 0u;
 }
 

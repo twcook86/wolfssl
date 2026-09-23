@@ -22,7 +22,7 @@
 /* Kernel-linked AES + SHA/auth-hash driver for the AM64x SA2UL crypto
  * accelerator.
  *
- * This is not a completely fresh implementation. It is mostly a
+ * This is not a completely fresh implementation.  It is mostly a
  * port of TI's mcu_plus_sdk_am64x SA2UL driver.  Hooks to the SDK UDMA
  * engine were replaced by calls to the j7_dma api in the Integrity BSP.
  */
